@@ -1,9 +1,12 @@
 import hashlib
 import sqlite3
 import tkinter as tk
-
+from tkinter import ttk
 from PIL import Image, ImageTk
 from icecream import ic
+
+
+Authority_options = ['root', 'student', 'teacher']
 
 
 def create_full_screen():
@@ -87,9 +90,10 @@ def close_windows(window, temp_root):
     temp_root.destroy()
 
 
-def create_full_screen():
+def create_full_screen(temp_title):
     temp_root = tk.Tk()
     # 获取屏幕宽度和高度
+    temp_root.title(temp_title)
     screen_width = temp_root.winfo_screenwidth()
     screen_height = temp_root.winfo_screenheight()
 
@@ -159,6 +163,123 @@ def create_login_screen_module(temp_root, temp_photo_img_bg, temp_photo_img_logo
                         height=25)
 
 
+def load_data(tree):
+    conn = sqlite3.connect('user_database.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT User_Name, Name, Authority FROM School_User")
+    data = cursor.fetchall()
+
+    for row in data:
+        tree.insert('', 'end', values=row)
+
+    conn.close()
+
+
+def find_and_scroll(tree, username_entry):
+    # 获取用户输入的账号
+    username = username_entry.get()
+
+    # 连接到SQLite数据库
+    conn = sqlite3.connect('user_database.db')
+    cursor = conn.cursor()
+
+    # 查询数据库中对应账号的位置
+    cursor.execute("SELECT ROWID FROM School_User WHERE User_Name=?", (username,))
+    result = cursor.fetchone()
+
+    cursor.execute("SELECT COUNT(*) FROM School_User")
+    row_count = cursor.fetchone()[0]
+
+    if result:
+        # 获取对应的行号
+        row_id = result[0]
+
+        # 滑动到对应的位置
+        tree.yview_moveto(row_id / row_count)
+        ic(row_id / row_count)
+
+    # 关闭连接
+    conn.close()
+
+
+def center_text(temp_tree):
+    # 将单元格中的文字居中
+    for col in temp_tree["columns"]:
+        temp_tree.column(col, anchor='center')
+
+# 创建一个新的函数用于更新权限
+def update_authority(tree, username_entry, combo_var):
+    # 获取用户输入的账号和新权限
+    username = username_entry.get()
+    new_authority = combo_var.get()
+
+    # 连接到SQLite数据库
+    conn = sqlite3.connect('user_database.db')
+    cursor = conn.cursor()
+
+    # 更新数据库中对应账号的权限
+    cursor.execute("UPDATE School_User SET Authority=? WHERE User_Name=?", (new_authority, username))
+
+    # 提交更改并关闭连接
+    conn.commit()
+    conn.close()
+
+    # 重新加载数据到Treeview
+    tree.delete(*tree.get_children())  # 清空Treeview
+    load_data(tree)  # 重新加载数据
+
+
+def create_root_screen_module(temp_root):
+    # 创建右侧的空白 Frame
+    # right_frame = tk.Frame(temp_root, width=500)
+    # right_frame.pack(side='right', fill='y')
+
+    temp_tree = ttk.Treeview(temp_root, columns=('User_Name', 'Name', 'Authority'), show='headings')
+    temp_tree.heading('User_Name', text='User_Name')
+    temp_tree.heading('Name', text='Name')
+    temp_tree.heading('Authority', text='Authority')
+    temp_tree.column('User_Name', width=100)
+    temp_tree.column('Name', width=150)
+    temp_tree.column('Authority', width=80)
+
+    load_data(temp_tree)
+
+    # 创建滑动条
+    yscroll = ttk.Scrollbar( temp_root, orient='vertical', command=temp_tree.yview)
+
+    # 创建按钮
+    button = tk.Button(temp_root, text="查询",width=6, height=1, command=lambda: find_and_scroll(temp_tree, username_entry1))
+    change_button = tk.Button(temp_root, text="更改", width=2, height=1,command=lambda: update_authority(temp_tree, username_entry2,combo_var))
+
+    # 创建输入框
+    username_entry1 = tk.Entry(temp_root,justify='center')
+    username_entry2 = tk.Entry(temp_root, justify='center')
+
+    combo_var = tk.StringVar()
+    combobox = ttk.Combobox(temp_root, textvariable=combo_var, values=Authority_options,width=5, state="readonly")
+    combobox.set(Authority_options[2])  # 设置默认选项
+
+
+    # 使用grid布局
+    temp_tree.grid(row=0, column=0, sticky='nsew', padx=(100, 0))
+    yscroll.grid(row=0, column=1, sticky='nsew', padx=(0,100))
+    button.grid(row=0, column=2, sticky='nsew',padx=(0,200),columnspan=2,pady=(190,650))
+    username_entry1.grid(row=0, column=2, sticky='ew',padx=(0,100),pady=(150,680))
+    username_entry2.grid(row=0, column=2, sticky='ew', padx=(0, 100), pady=(250, 580))
+    combobox.grid(row=0,column=2,sticky='ew',padx=(0, 100), pady=(280, 550))
+    change_button.grid(row=0, column=2, sticky='ew', padx=(0, 200),  pady=(315, 515))
+    # find_button = tk.Button(temp_root, text="Find and Scroll", command=lambda: find_and_scroll(temp_tree, 2021631096))
+    # find_button.pack(pady=10)
+    temp_tree.bind('<Map>', center_text(temp_tree))
+
+    # 设置主窗口的行和列权重，以便调整大小时可以均匀分配空间
+    temp_root.grid_rowconfigure(0, weight=1)
+    temp_root.grid_columnconfigure(0, weight=1)
+
+
+
+
+
 def load_photo_image(image_path):
     img = Image.open(image_path)
     photo_img = ImageTk.PhotoImage(img)
@@ -167,3 +288,6 @@ def load_photo_image(image_path):
 
 def load_photo_image_bg():
     return load_photo_image('Picture/bg.jpg')
+
+
+
