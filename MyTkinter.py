@@ -5,9 +5,40 @@ from tkinter import ttk
 from PIL import Image, ImageTk
 from icecream import ic
 
+global_username = 0;
+global_Authority = 0;
 
 Authority_options = ['root', 'student', 'teacher']
+Grades_options = ['Grade1', 'Grade2', 'Grade3', 'Grade4', 'Grade5', 'Grade6']
 
+
+def insert_default_text(entry, default_text):
+    entry.insert(0, default_text)
+    entry.config(fg='grey')  # 设置默认文本颜色为灰色
+
+def load_Grade_data_student(tree, student_id):
+    conn = sqlite3.connect('user_database.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT User_Name, Grade1, Grade2, Grade3, Grade4, Grade5, Grade6 FROM Grades WHERE User_Name=?", (student_id,))
+    data = cursor.fetchall()
+
+    for row in data:
+        tree.insert('', 'end', values=row)
+
+    conn.close()
+
+
+
+def on_entry_click(event, entry, default_text):
+    if entry.get() == default_text:
+        entry.delete(0, "end")  # 删除默认文本
+        entry.config(fg='grey')  # 设置文本颜色为灰色
+
+# 新增的辅助函数，用于处理焦点离开输入框时的事件
+def on_focus_out(event, entry, default_text):
+    if not entry.get():
+        entry.insert(0, default_text)
+        entry.config(fg='grey')  # 设置默认文本颜色为灰色
 
 def create_full_screen():
     root = tk.Tk()
@@ -28,13 +59,16 @@ def destroy_screen(root):
 
 def login(temp_entry_username, temp_entry_password, temp_root, temp_result_label):
     # 连接到数据库
+    global global_username, global_Authority
     conn = sqlite3.connect('user_database.db')
     cursor = conn.cursor()
     username = temp_entry_username.get()
+    global_username = username
     password = temp_entry_password.get()
-    ic(username)
+    # ic(username)
+    # ic(global_username)
     # 查询数据库中的账户和密码哈希值
-    cursor.execute("SELECT PassWord_Hash , Name FROM School_User WHERE User_Name=?", (username,))
+    cursor.execute("SELECT PassWord_Hash , Name , Authority FROM School_User WHERE User_Name=?", (username,))
     result = cursor.fetchone()
 
     if result:
@@ -44,6 +78,8 @@ def login(temp_entry_username, temp_entry_password, temp_root, temp_result_label
 
         if stored_hash == entered_hash:
             show_welcome_screen(result[1], temp_root)
+            global_Authority = result[2]
+            ic(global_Authority)
             # result_label.config(text="登录成功！")
             ic("登录成功！")
         else:
@@ -175,6 +211,19 @@ def load_data(tree):
     conn.close()
 
 
+def load_Grade_data(tree):
+    conn = sqlite3.connect('user_database.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT User_Name, Grade1, Grade2, Grade3, Grade4, Grade5, Grade6 FROM Grades")
+    data = cursor.fetchall()
+
+    for row in data:
+        tree.insert('', 'end', values=row)
+
+    conn.close()
+
+
+
 def find_and_scroll(tree, username_entry):
     # 获取用户输入的账号
     username = username_entry.get()
@@ -206,6 +255,28 @@ def center_text(temp_tree):
     # 将单元格中的文字居中
     for col in temp_tree["columns"]:
         temp_tree.column(col, anchor='center')
+
+def update_grades(tree, username_entry, combo_var, grade_entry):
+    # 获取用户输入的账号、成绩和科目
+    username = username_entry.get()
+    new_grade = grade_entry.get()
+    subject = combo_var.get()
+
+    # 连接到SQLite数据库
+    conn = sqlite3.connect('user_database.db')
+    cursor = conn.cursor()
+
+    # 更新数据库中对应账号的成绩
+    cursor.execute(f"UPDATE Grades SET {subject}=? WHERE User_Name=?", (new_grade, username))
+
+    # 提交更改并关闭连接
+    conn.commit()
+    conn.close()
+
+    # 重新加载数据到Treeview
+    tree.delete(*tree.get_children())  # 清空Treeview
+    load_Grade_data(tree)  # 重新加载数据
+
 
 # 创建一个新的函数用于更新权限
 def update_authority(tree, username_entry, combo_var):
@@ -277,7 +348,109 @@ def create_root_screen_module(temp_root):
     temp_root.grid_columnconfigure(0, weight=1)
 
 
+def create_teacher_screen_module(temp_root):
+    # 创建右侧的空白 Frame
+    temp_tree = ttk.Treeview(temp_root, columns=('User_Name', 'Grade1', 'Grade2', 'Grade3', 'Grade4', 'Grade5', 'Grade6'), show='headings')
+    temp_tree.heading('User_Name', text='User_Name')
+    temp_tree.heading('Grade1', text='Grade1')
+    temp_tree.heading('Grade2', text='Grade2')
+    temp_tree.heading('Grade3', text='Grade3')
+    temp_tree.heading('Grade4', text='Grade4')
+    temp_tree.heading('Grade5', text='Grade5')
+    temp_tree.heading('Grade6', text='Grade6')
 
+    # 设置列宽
+    temp_tree.column('User_Name', width=100)
+    for col in ['Grade1', 'Grade2', 'Grade3', 'Grade4', 'Grade5', 'Grade6']:
+        temp_tree.column(col, width=80)
+
+    load_Grade_data(temp_tree)
+
+    # 创建滑动条
+    yscroll = ttk.Scrollbar(temp_root, orient='vertical', command=temp_tree.yview)
+
+    # 创建按钮
+    button = tk.Button(temp_root, text="查询", width=6, height=1,
+                       command=lambda: find_and_scroll(temp_tree, username_entry1))
+    change_button = tk.Button(temp_root, text="更改", width=2, height=1,
+                       command=lambda: update_grades(temp_tree, username_entry2, combo_var, username_entry3))
+    combo_var = tk.StringVar()
+    combobox = ttk.Combobox(temp_root, textvariable=combo_var, values=Grades_options,width=5, state="readonly")
+    combobox.set(Grades_options[5])  # 设置默认选项
+
+    # 创建输入框
+    username_entry1 = tk.Entry(temp_root, justify='center')
+    username_entry2 = tk.Entry(temp_root, justify='center')
+    username_entry3 = tk.Entry(temp_root, justify='center')
+
+    # 插入默认文字
+    insert_default_text(username_entry1, "学号")
+    insert_default_text(username_entry2, "学号")
+    insert_default_text(username_entry3, "成绩")
+
+    username_entry1.bind('<FocusIn>', lambda event: on_entry_click(event, username_entry1, "学号"))
+    username_entry1.bind('<FocusOut>', lambda event: on_focus_out(event, username_entry1, "学号"))
+
+    username_entry2.bind('<FocusIn>', lambda event: on_entry_click(event, username_entry2, "学号"))
+    username_entry2.bind('<FocusOut>', lambda event: on_focus_out(event, username_entry2, "学号"))
+
+    username_entry3.bind('<FocusIn>', lambda event: on_entry_click(event, username_entry3, "成绩"))
+    username_entry3.bind('<FocusOut>', lambda event: on_focus_out(event, username_entry3, "成绩"))
+
+
+    # 使用grid布局
+    temp_tree.grid(row=0, column=0, sticky='nsew', padx=(100, 0))
+    yscroll.grid(row=0, column=1, sticky='nsew', padx=(0, 100))
+    button.grid(row=0, column=2, sticky='nsew',padx=(0,200),columnspan=2,pady=(190,650))
+    username_entry1.grid(row=0, column=2, sticky='ew',padx=(0,100),pady=(150,680))
+    username_entry2.grid(row=0, column=2, sticky='ew', padx=(0, 100), pady=(250, 580))
+    change_button.grid(row=0, column=2, sticky='ew', padx=(0, 200),  pady=(350, 830-350))
+    username_entry3.grid(row=0, column=2, sticky='ew', padx=(0, 100), pady=(310, 520))
+    combobox.grid(row=0,column=2,sticky='ew',padx=(0, 100), pady=(280, 550))
+
+    temp_tree.bind('<Map>', center_text(temp_tree))
+
+
+
+    # 设置主窗口的行和列权重，以便调整大小时可以均匀分配空间
+    temp_root.grid_rowconfigure(0, weight=1)
+    temp_root.grid_columnconfigure(0, weight=1)
+
+
+
+def create_student_screen_module(temp_root, student_id):
+    # 创建右侧的空白 Frame
+    temp_tree = ttk.Treeview(temp_root, columns=('User_Name', 'Grade1', 'Grade2', 'Grade3', 'Grade4', 'Grade5', 'Grade6'), show='headings')
+    temp_tree.heading('User_Name', text='User_Name')
+    temp_tree.heading('Grade1', text='Grade1')
+    temp_tree.heading('Grade2', text='Grade2')
+    temp_tree.heading('Grade3', text='Grade3')
+    temp_tree.heading('Grade4', text='Grade4')
+    temp_tree.heading('Grade5', text='Grade5')
+    temp_tree.heading('Grade6', text='Grade6')
+
+    # 设置列宽
+    temp_tree.column('User_Name', width=100)
+    for col in ['Grade1', 'Grade2', 'Grade3', 'Grade4', 'Grade5', 'Grade6']:
+        temp_tree.column(col, width=80)
+
+    load_Grade_data_student(temp_tree, student_id)
+
+    # 创建滑动条
+    yscroll = ttk.Scrollbar(temp_root, orient='vertical', command=temp_tree.yview)
+
+
+    # 使用grid布局
+    temp_tree.grid(row=0, column=0, sticky='nsew', padx=(100, 0))
+    yscroll.grid(row=0, column=1, sticky='nsew', padx=(0, 100))
+    
+    temp_tree.bind('<Map>', center_text(temp_tree))
+
+
+
+    # 设置主窗口的行和列权重，以便调整大小时可以均匀分配空间
+    temp_root.grid_rowconfigure(0, weight=1)
+    temp_root.grid_columnconfigure(0, weight=1)
 
 
 def load_photo_image(image_path):
